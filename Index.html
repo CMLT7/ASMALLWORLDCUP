@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pixel World Cup</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #87ceeb;
+    font-family: Arial, sans-serif;
+  }
+
+  canvas {
+    display: block;
+    margin: auto;
+    background: linear-gradient(#87ceeb 0%, #87ceeb 65%, #3fa34d 65%, #2c7a35 100%);
+    image-rendering: pixelated;
+  }
+
+  #ui {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-size: 24px;
+    text-shadow: 2px 2px black;
+    user-select: none;
+  }
+
+  #controls {
+    position: absolute;
+    bottom: 10px;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-size: 16px;
+    text-shadow: 1px 1px black;
+  }
+</style>
+</head>
+<body>
+<div id="ui">Blue 0 - 0 Red</div>
+<div id="controls">
+  Blue: WASD + SPACE &nbsp;&nbsp;|&nbsp;&nbsp; Red: Arrow Keys + ENTER
+</div>
+<canvas id="game" width="1000" height="550"></canvas>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const ui = document.getElementById('ui');
+
+const gravity = 0.45;
+const friction = 0.98;
+
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+class Player {
+  constructor(x, color, controls) {
+    this.x = x;
+    this.y = 380;
+    this.vx = 0;
+    this.vy = 0;
+    this.w = 40;
+    this.h = 40;
+    this.color = color;
+    this.controls = controls;
+    this.grounded = false;
+    this.kickCooldown = 0;
+  }
+
+  update() {
+    if (keys[this.controls.left]) this.vx -= 0.7;
+    if (keys[this.controls.right]) this.vx += 0.7;
+
+    if (keys[this.controls.jump] && this.grounded) {
+      this.vy = -11;
+      this.grounded = false;
+    }
+
+    this.vy += gravity;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    this.vx *= friction;
+
+    if (this.y + this.h >= 470) {
+      this.y = 470 - this.h;
+      this.vy = 0;
+      this.grounded = true;
+    }
+
+    if (this.x < 0) this.x = 0;
+    if (this.x + this.w > canvas.width) this.x = canvas.width - this.w;
+
+    if (keys[this.controls.kick] && this.kickCooldown <= 0) {
+      kickBall(this);
+      this.kickCooldown = 25;
+    }
+
+    if (this.kickCooldown > 0) this.kickCooldown--;
+  }
+
+  draw() {
+    ctx.fillStyle = this.color;
+
+    // body
+    ctx.fillRect(this.x, this.y, this.w, this.h);
+
+    // eyes
+    ctx.fillStyle = 'white';
+    ctx.fillRect(this.x + 8, this.y + 10, 6, 6);
+    ctx.fillRect(this.x + 26, this.y + 10, 6, 6);
+
+    // pupils
+    ctx.fillStyle = 'black';
+    ctx.fillRect(this.x + 10, this.y + 12, 2, 2);
+    ctx.fillRect(this.x + 28, this.y + 12, 2, 2);
+
+    // legs
+    ctx.fillStyle = '#222';
+    ctx.fillRect(this.x + 6, this.y + 40, 8, 10);
+    ctx.fillRect(this.x + 26, this.y + 40, 8, 10);
+  }
+}
+
+const ball = {
+  x: 500,
+  y: 250,
+  r: 16,
+  vx: 0,
+  vy: 0,
+
+  update() {
+    this.vy += gravity;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    this.vx *= 0.995;
+    this.vy *= 0.995;
+
+    if (this.y + this.r > 470) {
+      this.y = 470 - this.r;
+      this.vy *= -0.75;
+    }
+
+    if (this.x - this.r < 0) {
+      if (this.y > 300) scoreGoal('red');
+      this.x = this.r;
+      this.vx *= -0.8;
+    }
+
+    if (this.x + this.r > canvas.width) {
+      if (this.y > 300) scoreGoal('blue');
+      this.x = canvas.width - this.r;
+      this.vx *= -0.8;
+    }
+  },
+
+  draw() {
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'black';
+    ctx.fillRect(this.x - 4, this.y - 4, 8, 8);
+  }
+};
+
+const blue = new Player(150, '#3b82f6', {
+  left: 'a',
+  right: 'd',
+  jump: 'w',
+  kick: ' '
+});
+
+const red = new Player(800, '#ef4444', {
+  left: 'arrowleft',
+  right: 'arrowright',
+  jump: 'arrowup',
+  kick: 'enter'
+});
+
+let scoreBlue = 0;
+let scoreRed = 0;
+
+function resetBall() {
+  ball.x = 500;
+  ball.y = 200;
+  ball.vx = (Math.random() - 0.5) * 10;
+  ball.vy = -5;
+}
+
+function scoreGoal(team) {
+  if (team === 'blue') scoreBlue++;
+  if (team === 'red') scoreRed++;
+
+  ui.innerText = `Blue ${scoreBlue} - ${scoreRed} Red`;
+
+  resetBall();
+}
+
+function kickBall(player) {
+  const dx = ball.x - (player.x + player.w / 2);
+  const dy = ball.y - (player.y + player.h / 2);
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist < 80) {
+    ball.vx += dx * 0.18;
+    ball.vy += dy * 0.12 - 4;
+  }
+}
+
+function collide(player) {
+  const nearestX = Math.max(player.x, Math.min(ball.x, player.x + player.w));
+  const nearestY = Math.max(player.y, Math.min(ball.y, player.y + player.h));
+
+  const dx = ball.x - nearestX;
+  const dy = ball.y - nearestY;
+
+  if (dx * dx + dy * dy < ball.r * ball.r) {
+    ball.vx += dx * 0.2;
+    ball.vy += dy * 0.2;
+  }
+}
+
+function drawField() {
+  ctx.fillStyle = '#2f9e44';
+  ctx.fillRect(0, 470, canvas.width, 80);
+
+  // middle line
+  ctx.fillStyle = 'white';
+  ctx.fillRect(canvas.width / 2 - 3, 120, 6, 350);
+
+  // goals
+  ctx.fillStyle = '#dddddd';
+  ctx.fillRect(0, 300, 20, 170);
+  ctx.fillRect(canvas.width - 20, 300, 20, 170);
+
+  // center circle
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, 330, 60, 0, Math.PI * 2);
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawField();
+
+  blue.update();
+  red.update();
+  ball.update();
+
+  collide(blue);
+  collide(red);
+
+  blue.draw();
+  red.draw();
+  ball.draw();
+
+  requestAnimationFrame(gameLoop);
+}
+
+resetBall();
+gameLoop();
+</script>
+</body>
+</html>
